@@ -1,0 +1,145 @@
+================================================================================
+          AZURE HIGH AVAILABILITY & LOAD BALANCER DEPLOYMENT
+              LEARNING GUIDE & INTERVIEW PREPARATION
+================================================================================
+
+This document is designed to serve as a comprehensive reference guide to understand
+the architectural choices, core Azure concepts, and interview questions related to
+this project.
+
+--------------------------------------------------------------------------------
+PART 1: CORE CONCEPTS & LEARNING GUIDE
+--------------------------------------------------------------------------------
+
+1. HIGH AVAILABILITY (HA)
+   High Availability refers to systems that are durable and remain operational
+   for a high percentage of time (e.g., 99.9% uptime). In cloud deployments, HA
+   protects against:
+   * Planned Maintenance: When Microsoft updates the physical host OS of hypervisors.
+   * Unplanned Downtime: Hardware failures, power failures, or network disruptions
+     in the datacenter.
+
+2. AZURE AVAILABILITY SETS (AS)
+   An Availability Set is a logical grouping capability for isolating VM resources
+   from each other when they're deployed. 
+   It utilizes two main concepts:
+   * Fault Domains (FD): These represent physical racks sharing common power sources
+     and network switches. By spreading VMs across 2 or 3 Fault Domains, we ensure
+     that a physical hardware or power failure at the rack level only affects one
+     subset of our VMs, leaving the others online.
+   * Update Domains (UD): These represent groups of VMs and underlying physical hardware
+     that can be rebooted at the same time for planned maintenance. Only one Update
+     Domain is updated at a time, ensuring that at least one VM remains active
+     during Azure platform upgrades.
+
+3. AVAILABILITY SETS vs. AVAILABILITY ZONES
+   * Availability Set: Protects against failures *within* a single datacenter (rack/power
+     failures) by spreading VMs across physical racks. Uptime SLA: 99.95%.
+   * Availability Zones (AZ): Protects against *entire datacenter failures* within
+     a region. Each zone consists of one or more datacenters with independent power,
+     cooling, and networking. VMs are placed in distinct physical zones (e.g., Zone 1,
+     Zone 2, Zone 3). Uptime SLA: 99.99%.
+
+4. AZURE LOAD BALANCER
+   An Azure Load Balancer operates at Layer 4 (Transport Layer) of the OSI model.
+   It acts as the single point of contact for clients, distributing incoming traffic
+   across healthy Virtual Machine instances.
+   * Public Load Balancer: Maps a public IP address to the private IP addresses of the VMs
+     in the backend pool.
+   * Internal (Private) Load Balancer: Routes traffic only within a virtual network or
+     from a VPN gateway.
+   * Key Components:
+     - Frontend IP Configuration: The entry point. Can be static or dynamic, public or private.
+     - Backend Address Pool: The group of VMs/NICs that receive the incoming traffic.
+     - Health Probes: Monitored endpoints (such as port 80 TCP or HTTP path) used to test
+       if backend instances are healthy. If a probe fails a set number of times, the LB
+       stops sending traffic to that VM.
+     - Load Balancing Rules: Tells the LB how to map traffic (e.g., "Take incoming TCP
+       traffic on frontend port 80 and forward it to backend pool port 80").
+
+5. SECURING BACKEND NETWORK INTERFACES (NICs)
+   As a security best practice, virtual machines hosting business logic or web databases
+   should not be exposed directly to the public internet (i.e., they should not have
+   Public IP addresses).
+   * Detached Public IPs: The VMs only have private IPs (e.g., `10.0.1.4`, `10.0.1.5`).
+   * Access via Load Balancer: The only way users can access the web pages is through
+     the Load Balancer's public IP.
+   * How do we configure VMs without public IPs?
+     - Outbound access is automatically managed by Azure Default Outbound access (or NAT Gateway).
+     - Administrative access is achieved securely via Azure Bastion (a secure browser-based
+       RDP/SSH) or using the Azure VM Agent's Run Command API (`az vm run-command invoke`),
+       which communicates securely over Azure's internal control plane without open RDP ports.
+
+6. ROLE-BASED ACCESS CONTROL (RBAC) & PRINCIPLE OF LEAST PRIVILEGE
+   RBAC allows you to manage who has access to Azure resources, what they can do,
+   and what areas they have access to. It is composed of three elements:
+   * Security Principal: An object representing a User, Group, Service Principal, or Managed Identity.
+   * Role Definition: A collection of permissions (e.g., Owner, Contributor, Reader).
+   * Scope: The boundary of resources the permissions apply to (Subscription, Resource Group, Resource).
+   * Principle of Least Privilege: Users should only be given the absolute minimum level of
+     access required to perform their jobs. In this project, instead of giving the Operations
+     team "Owner" rights, they were added to a specific Entra ID group (`ops-team-group`) and
+     granted the **Contributor** role restricted only to the scope of the project's Resource Group (`rg-azure-loadbalancer`).
+
+--------------------------------------------------------------------------------
+PART 2: INTERVIEW PREPARATION & QUESTIONS
+--------------------------------------------------------------------------------
+
+Q1: Why did you use an Availability Set instead of Availability Zones for this project?
+A1: Availability Sets protect against localized hardware failures within a single datacenter,
+    while Availability Zones protect against a complete datacenter outage. For a cost-effective,
+    free-tier deployment where latency must be kept at a minimum and resources are basic,
+    an Availability Set is ideal. In enterprise deployments requiring a higher SLA (99.99%),
+    Availability Zones are preferred.
+
+Q2: How does the Azure Load Balancer determine if a VM is down, and what happens when it is?
+A2: The Load Balancer uses Health Probes. In this deployment, we set up a TCP Health Probe on
+    Port 80 with an interval of 15 seconds and a threshold of 2. This means every 15 seconds,
+    the Load Balancer sends a TCP handshake to port 80 on each VM. If a VM fails to respond
+    twice consecutively, it is marked as unhealthy, and the Load Balancer immediately stops
+    routing new incoming traffic to it. Traffic is routed exclusively to the remaining healthy
+    VMs.
+
+Q3: Why don't the VMs have Public IP addresses, and how did you configure them without one?
+A3: Leaving public RDP (3389) or HTTP (80) ports exposed directly on a VM makes it a target for
+    brute-force and exploit scans. Detaching the Public IPs from the NICs secures the VMs.
+    To configure the VMs, install IIS, and set up the web page, we used the Azure VM Agent
+    via the Azure CLI `az vm run-command invoke` command. This uses Azure's secure management
+    plane to run PowerShell scripts inside the VM, meaning no direct SSH/RDP connection from
+    the internet is required.
+
+Q4: What is the difference between Azure Load Balancer (Layer 4) and Application Gateway (Layer 7)?
+A4: * Azure Load Balancer operates at Layer 4 (TCP/UDP). It routes traffic based on IP addresses
+      and port numbers. It is extremely fast and can handle millions of requests, but has no
+      awareness of HTTP paths, cookies, or SSL/TLS encryption details.
+    * Azure Application Gateway operates at Layer 7 (HTTP/HTTPS). It can perform URL path-based
+      routing (e.g., routing `/images` to one backend pool and `/api` to another), supports
+      cookie-based session affinity, SSL termination, and features a Web Application Firewall (WAF)
+      for security.
+
+Q5: In your script, you created an Entra ID group and assigned the Contributor role. Why is this scoped to the Resource Group instead of the Subscription?
+A5: This follows the Security Principle of Least Privilege. Scoping the Contributor role to the
+    Resource Group (`rg-azure-loadbalancer`) ensures that members of the operations team can manage,
+    update, and delete resources related only to this specific project, without having any access
+    to other environments or resources deployed in the same subscription.
+
+Q6: What is a cold start vs. hot start in the context of Load Balancer routing?
+A6: When a VM is added to the backend pool, or recovers from an unhealthy state, it doesn't receive
+    traffic instantly. The Health Probe must first run and verify consecutive successful probes (based
+    on the configured threshold, e.g., 2 times). Once the threshold is met, the Load Balancer starts
+    sending new TCP connections to it. This delay prevents sending traffic to a VM that is still booting
+    up or not fully ready.
+
+Q7: What happens if the public IP of the Load Balancer changes? How do you prevent it?
+A7: By default, Public IPs can be allocated dynamically or statically. In our deployment, we specified
+    `--allocation-method Static` and SKU `Standard` for the Public IP (`pip-lb-project`). This guarantees
+    that the IP address remains the same, even if the load balancer is stopped, restarted, or modified,
+    which is essential for DNS mapping.
+
+Q8: How does the Azure Load Balancer distribute traffic? Is it round-robin?
+A8: By default, Azure Load Balancer uses a 5-tuple hash to distribute traffic:
+    (Source IP, Source Port, Destination IP, Destination Port, Protocol).
+    Because the hash is consistent, a client with a specific Source IP and Source Port will stay
+    connected to the same backend VM for the duration of the session. It is not a strict round-robin,
+    but rather a hash-based distribution. We can configure "Session Persistence" (e.g., Client IP or
+    Client IP and Protocol) if we need sticky sessions.
