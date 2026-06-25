@@ -1,6 +1,6 @@
 # main.tf - Core Terraform Configuration for High-Availability Web Infrastructure
 
-# Locals for HTML Base64 pages to prevent shell parsing and escaping errors
+# Locals for HTML Base64 pages
 locals {
   html_base64 = [
     # Server 1 - Light Blue Theme
@@ -159,7 +159,7 @@ resource "azurerm_windows_virtual_machine" "vm" {
   source_image_reference {
     publisher = "MicrosoftWindowsServer"
     offer     = "WindowsServer"
-    sku       = "2022-datacenter-smalldisk-g2" # Boot-efficient smaller 30GB disk
+    sku       = "2022-datacenter-smalldisk-g2"
     version   = "latest"
   }
 }

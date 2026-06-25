@@ -9,13 +9,13 @@ variable "resource_group_name" {
 variable "location" {
   description = "The Azure Region in which all resources should be created."
   type        = string
-  default     = "centralus" # Region verified to have standardDSv3Family cores capacity
+  default     = "centralus"
 }
 
 variable "vm_size" {
   description = "The size of the Virtual Machines to deploy."
   type        = string
-  default     = "Standard_D2s_v3" # Size verified to have quota and capacity
+  default     = "Standard_D2s_v3"
 }
 
 variable "admin_username" {

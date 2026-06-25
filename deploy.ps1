@@ -3,7 +3,7 @@
 
 $ErrorActionPreference = "Stop"
 
-# --- Configuration Variables (Optimized for Azure Free Tier) ---
+# --- Configuration Variables ---
 $ResourceGroupName = "rg-azure-loadbalancer"
 $Location = "centralus"
 $VNetName = "vnet-lb-project"
@@ -15,7 +15,7 @@ $LoadBalancerName = "lb-project"
 $PublicIPName = "pip-lb-project"
 $OpsGroupName = "ops-team-group"
 $AdminUsername = "azureadm"
-$VMSize = "Standard_D2s_v3" # Unrestricted standard size (2 vCPUs, 8 GiB RAM)
+$VMSize = "Standard_D2s_v3"
 
 # -------------------------------------------------------------
 # 1. Prerequisite Checks (Azure CLI Login)
@@ -180,7 +180,7 @@ az network nic create `
 # -------------------------------------------------------------
 # 8. VM Provisioning in Availability Set (Parallel Launch)
 # -------------------------------------------------------------
-Write-Host "`n[8/11] Deploying Virtual Machines (Standard_B1s) in Availability Set..." -ForegroundColor Cyan
+Write-Host "`n[8/11] Deploying Virtual Machines in Availability Set..." -ForegroundColor Cyan
 Write-Host "Starting deployment of $VM1Name (No-Wait)..." -ForegroundColor DarkYellow
 az vm create `
     --name $VM1Name `
@@ -218,7 +218,7 @@ Write-Host "$VM2Name is ready!" -ForegroundColor Green
 # -------------------------------------------------------------
 Write-Host "`n[9/11] Configuring IIS & Custom Web Pages on VM instances..." -ForegroundColor Cyan
 
-# PowerShell script blocks to run inside the VMs (using base64 to avoid HTML character escaping errors)
+# PowerShell script blocks to run inside the VMs
 $IISScriptVM1 = 'Install-WindowsFeature -name Web-Server -IncludeManagementTools; $html = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("PGh0bWw+PGJvZHkgc3R5bGU9ImZvbnQtZmFtaWx5OiBBcmlhbCwgc2Fucy1zZXJpZjsgdGV4dC1hbGlnbjogY2VudGVyOyBtYXJnaW4tdG9wOiAxMCU7IGJhY2tncm91bmQtY29sb3I6ICNmMGY4ZmY7Ij48aDE+V2VsY29tZSB0byBTZXJ2ZXIgMTwvaDE+PHA+U2VydmVkIGZyb20gQmFja2VuZCBWTSAxIChIaWdobHkgQXZhaWxhYmxlKTwvcD48L2JvZHk+PC9odG1sPg==")); Set-Content -Path "C:\inetpub\wwwroot\iisstart.htm" -Value $html'
 $IISScriptVM2 = 'Install-WindowsFeature -name Web-Server -IncludeManagementTools; $html = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("PGh0bWw+PGJvZHkgc3R5bGU9ImZvbnQtZmFtaWx5OiBBcmlhbCwgc2Fucy1zZXJpZjsgdGV4dC1hbGlnbjogY2VudGVyOyBtYXJnaW4tdG9wOiAxMCU7IGJhY2tncm91bmQtY29sb3I6ICNmZmU0ZTE7Ij48aDE+V2VsY29tZSB0byBTZXJ2ZXIgMjwvaDE+PHA+U2VydmVkIGZyb20gQmFja2VuZCBWTSAyIChIaWdobHkgQXZhaWxhYmxlKTwvcD48L2JvZHk+PC9odG1sPg==")); Set-Content -Path "C:\inetpub\wwwroot\iisstart.htm" -Value $html'
 
