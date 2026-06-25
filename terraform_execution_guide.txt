@@ -1,0 +1,146 @@
+================================================================================
+           TERRAFORM AZURE HIGH-AVAILABILITY LOAD BALANCER DEPLOYMENT
+                    STEP-BY-STEP EXECUTION GUIDE
+================================================================================
+
+This guide outlines the procedural steps to initialize, deploy (activate),
+troubleshoot, and destroy (deactivate) the high-availability Azure load balancer
+web infrastructure using Terraform via VS Code and PowerShell.
+
+--------------------------------------------------------------------------------
+PART 1: PROJECT DIRECTORY & PREREQUISITES
+--------------------------------------------------------------------------------
+
+1. PROJECT DIRECTORY STRUCTURE
+   Open your project directory in VS Code. It should look like this:
+   
+   PLProject2/
+   ├── project 2.1/
+   │   ├── .gitignore             # Git ignore file (excludes state & binaries)
+   │   ├── providers.tf           # Terraform providers configuration
+   │   ├── variables.tf           # Input variables definition
+   │   ├── main.tf                # Core Azure & Entra ID resource declarations
+   │   └── outputs.tf             # Output variables (Load Balancer Public IP)
+   ├── deploy.ps1                 # CLI deployment script (from Phase 1)
+   └── README.md                  # General project documentation
+
+2. PREREQUISITES
+   Before running any command, ensure:
+   * **Azure CLI** is installed and configured on your machine.
+   * **Terraform (v1.0.0+)** is installed and added to your system's PATH.
+   * You have active administrator access on your Azure subscription.
+
+--------------------------------------------------------------------------------
+PART 2: ACTIVATION (DEPLOYMENT) STEPS
+--------------------------------------------------------------------------------
+
+Open a PowerShell terminal in VS Code and run the following commands sequentially:
+
+STEP 1: Log in to your Azure Account
+Run the login command. If your account is associated with multiple directories
+or requires Multi-Factor Authentication (MFA), specify the Tenant ID:
+```powershell
+az login --tenant <YOUR-TENANT-ID>
+```
+
+STEP 2: Set your Active Subscription
+Verify your subscription list and activate the subscription you wish to deploy to:
+```powershell
+# List active subscriptions
+az account list --output table
+
+# Set active subscription
+az account set --subscription "<YOUR-SUBSCRIPTION-NAME-OR-ID>"
+```
+
+STEP 3: Navigate to the Terraform Directory
+```powershell
+cd "project 2.1"
+```
+
+STEP 4: Initialize Terraform
+This command downloads the required providers (`azurerm` and `azuread`) and
+initializes the local backend state:
+```powershell
+terraform init
+```
+
+STEP 5: Validate and Preview the Execution Plan
+Verify the configuration for any syntax errors and preview the 21 resources that
+will be created. Since `admin_password` is marked as a sensitive variable, you must
+supply it:
+```powershell
+terraform plan -var="admin_password=<YOUR-SECURE-ADMIN-PASSWORD>"
+```
+*Note: Replace `<YOUR-SECURE-ADMIN-PASSWORD>` with a password that meets Azure VM requirements
+(minimum 12 characters, including uppercase, lowercase, numbers, and special characters).*
+
+STEP 6: Apply the Configuration
+Run the apply command to deploy the infrastructure to Azure. We use the `-auto-approve` flag
+to skip the interactive confirmation prompt:
+```powershell
+terraform apply -auto-approve -var="admin_password=<YOUR-SECURE-ADMIN-PASSWORD>"
+```
+*Deployment takes approximately 5–7 minutes as it provisions the VNet, Subnet, NSG,
+Availability Set, Load Balancer, 2 Windows VMs, and installs IIS inside them.*
+
+STEP 7: Retrieve the Load Balancer Public IP
+Once successfully deployed, the terminal will print:
+```text
+Outputs:
+load_balancer_public_ip = "<LOAD-BALANCER-PUBLIC-IP>"
+```
+Copy and paste this IP address into your web browser to test the load balancer.
+
+--------------------------------------------------------------------------------
+PART 3: TROUBLESHOOTING STATE & EXTENSIONS
+--------------------------------------------------------------------------------
+
+In real-world environments, Windows VM Custom Script Extensions (`install-iis`)
+can take several minutes to bootstrap. If the Terraform client polling times out
+and exits with:
+`polling after CreateOrUpdate: internal-error: unimplemented polling status "Unknown"`
+
+The resources actually exist in Azure, but the local `.tfstate` file is out of sync.
+To resolve this, import the extensions directly into the state file and rerun apply:
+
+1. Import Extension 0 (VM-1):
+```powershell
+terraform import -var="admin_password=<YOUR-SECURE-ADMIN-PASSWORD>" "azurerm_virtual_machine_extension.iis[0]" "/subscriptions/<YOUR-SUBSCRIPTION-ID>/resourceGroups/rg-azure-lb-terraform/providers/Microsoft.Compute/virtualMachines/vm-server-1-tf/extensions/install-iis"
+```
+
+2. Import Extension 1 (VM-2):
+```powershell
+terraform import -var="admin_password=<YOUR-SECURE-ADMIN-PASSWORD>" "azurerm_virtual_machine_extension.iis[1]" "/subscriptions/<YOUR-SUBSCRIPTION-ID>/resourceGroups/rg-azure-lb-terraform/providers/Microsoft.Compute/virtualMachines/vm-server-2-tf/extensions/install-iis"
+```
+
+3. Re-run Apply:
+Rerun the apply command. Terraform will detect that everything matches the desired
+state and successfully synchronize the state file:
+```powershell
+terraform apply -auto-approve -var="admin_password=<YOUR-SECURE-ADMIN-PASSWORD>"
+```
+
+--------------------------------------------------------------------------------
+PART 4: DEACTIVATION (CLEAN-UP / DESTROY) STEPS
+--------------------------------------------------------------------------------
+
+To avoid ongoing charges on your Azure account, clean up the environment when
+testing is complete. Run the destroy command inside the `project 2.1` directory:
+
+```powershell
+terraform destroy -auto-approve -var="admin_password=<YOUR-SECURE-ADMIN-PASSWORD>"
+```
+*This command will cleanly deallocate and delete all 21 resources in Azure
+(VMs, Load Balancer, VNet, Subnet, Public IP, NSG, and Entra ID group).*
+
+--------------------------------------------------------------------------------
+PART 5: SECURITY BEST PRACTICES
+--------------------------------------------------------------------------------
+
+1. NEVER commit your `.tfstate` or `.tfstate.backup` files to git. They contain
+   sensitive data, including your administrative password in plain text. Keep the
+   `.gitignore` file intact.
+2. Avoid hardcoding passwords inside variables files. Instead, use environment
+   variables (`$env:TF_VAR_admin_password = "..."`) or pass them via the command line
+   variable flag (`-var`) during execution.
